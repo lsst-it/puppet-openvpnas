@@ -20,6 +20,7 @@ define openvpnas::config::key (
     path    => ['/bin', '/usr/bin', '/sbin', '/usr/sbin'],
     command => "/usr/local/openvpn_as/scripts/sacli -k ${key} -v '${string_value}' ConfigPut",
     unless  => "/usr/local/openvpn_as/scripts/sacli -k ${key} ConfigQuery | grep -q -- '${string_value}'",
+    require => Exec['wait_for_openvpnas_ready'],
   }
 
   exec { "openvpnas-apply-${name}":

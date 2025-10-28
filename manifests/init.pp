@@ -133,6 +133,22 @@ class openvpnas (
 
   # Apply config keys if provided
   if $config and !empty($config) {
+    $sacli = '/usr/local/openvpn_as/scripts/sacli'
+
+    exec { 'wait_for_openvpnas_socket':
+      command => '/bin/true',
+      unless  => '/usr/bin/test -S /usr/local/openvpn_as/etc/sock/sagent',
+      require => Service[$service_name],
+    }
+
+    exec { 'wait_for_openvpnas_ready':
+      command   => "${sacli} ConfigQuery > /dev/null 2>&1",
+      tries     => 10,
+      try_sleep => 3,
+      timeout   => 60,
+      require   => Exec['wait_for_openvpnas_socket'],
+    }
+
     $config.each |$k, $v| {
       openvpnas::config::key { $k:
         key   => $k,
