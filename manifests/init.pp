@@ -44,6 +44,12 @@ class openvpnas (
   String  $cert_source_path      = "/etc/letsencrypt/live/${facts['networking']['fqdn']}",
   Optional[Hash] $config         = undef,
 ) {
+
+  $sacli = '/usr/local/openvpn_as/scripts/sacli'
+
+  # ensure package is installed before calling sacli
+  Package[$package_name] -> Service[$service_name]
+
   # Optional repo management
   if $manage_repo {
     yumrepo { $yumrepo_id:
@@ -131,24 +137,22 @@ class openvpnas (
     }
   }
 
-  # Apply config keys if provided
+  # Wait for OpenVPN AS to be fully ready (ALWAYS, not just when $config is set)
+  exec { 'wait_for_openvpnas_socket':
+    command => '/bin/bash -c "for i in {1..30}; do [ -S /usr/local/openvpn_as/etc/sock/sagent ] && exit 0; sleep 2; done; exit 1"',
+    unless  => '/usr/bin/test -S /usr/local/openvpn_as/etc/sock/sagent',
+    require => Service[$service_name],
+    timeout => 120,
+    path    => ['/bin', '/usr/bin'],
+  }
+
+  # Anchor to ensure service is ready before any configuration
+  anchor { 'openvpnas::ready':
+    require => Exec['wait_for_openvpnas_socket'],
+  }
+
+  # Apply config keys if provided via the config parameter
   if $config and !empty($config) {
-    $sacli = '/usr/local/openvpn_as/scripts/sacli'
-
-    exec { 'wait_for_openvpnas_socket':
-      command => '/bin/true',
-      unless  => '/usr/bin/test -S /usr/local/openvpn_as/etc/sock/sagent',
-      require => Service[$service_name],
-    }
-
-    exec { 'wait_for_openvpnas_ready':
-      command   => "${sacli} ConfigQuery > /dev/null 2>&1",
-      tries     => 10,
-      try_sleep => 3,
-      timeout   => 60,
-      require   => Exec['wait_for_openvpnas_socket'],
-    }
-
     $config.each |$k, $v| {
       openvpnas::config::key { $k:
         key   => $k,

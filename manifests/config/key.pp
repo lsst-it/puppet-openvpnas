@@ -16,13 +16,30 @@ define openvpnas::config::key (
     default => String($value),
   }
 
+  # Build the require array based on the key
+  $base_require = [Anchor['openvpnas::ready']]
+
+  $full_require = $key ? {
+    'auth.module.type' => $base_require + [
+      Openvpnas::Config::Key['auth.ldap.0.server.0.host'],
+      Openvpnas::Config::Key['auth.ldap.0.server.1.host'],
+      Openvpnas::Config::Key['auth.ldap.0.bind_dn'],
+      Openvpnas::Config::Key['auth.ldap.0.bind_pw'],
+      Openvpnas::Config::Key['auth.ldap.0.enable'],
+      Openvpnas::Config::Key['auth.ldap.0.users_base_dn'],
+      Openvpnas::Config::Key['auth.ldap.0.uname_attr'],
+    ],
+    default => $base_require,
+  }
+
   exec { "openvpnas-set-${name}":
     path    => ['/bin', '/usr/bin', '/sbin', '/usr/sbin'],
     command => "/usr/local/openvpn_as/scripts/sacli -k ${key} -v '${string_value}' ConfigPut",
-    unless  => "/usr/local/openvpn_as/scripts/sacli -k ${key} ConfigQuery | grep -q -- '${string_value}'",
-    require => Exec['wait_for_openvpnas_ready'],
+    unless  => "/bin/bash -c '/usr/local/openvpn_as/scripts/sacli ConfigQuery 2>/dev/null | /bin/grep -q \"\\\"${key}\\\": \\\"${string_value}\\\"\"'",
+    require => $full_require,
   }
 
+  # Apply only if the key changed
   exec { "openvpnas-apply-${name}":
     path        => ['/bin', '/usr/bin', '/sbin', '/usr/sbin'],
     command     => '/usr/local/openvpn_as/scripts/sacli start',
